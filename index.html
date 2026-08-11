@@ -107,7 +107,6 @@
                 <select id="propColorPaletteMode" onchange="onPaletteModeChange(this.value)">
                     <option value="all">All colors (所有颜色)</option>
                     <option value="free">Free colors (免费基础颜色)</option>
-                    <option value="unlocked">Unlocked colors (已解锁颜色)</option>
                     <option value="original">Original template colors (原模版颜色)</option>
                 </select>
             </div>
@@ -139,7 +138,7 @@
                 <div class="palette-grid" id="paletteGrid"></div>
             </div>
 
-            <button type="button" class="btn" onclick="exportWplace()">💾 导出新的 .wplace 文件 (含最新 Bounds)</button>
+            <button type="button" class="btn" onclick="exportWplace()">💾 导出新的 .wplace 文件</button>
             <button type="button" class="btn btn-green" onclick="exportPNG()">🖼️ 导出转换后的 PNG 图片</button>
         </form>
     </div>
