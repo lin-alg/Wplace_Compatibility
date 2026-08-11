@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>Wplace 官方模板转png转换器</title>
+    <style>
+        :root { --bg: #f8fafc; --card: #ffffff; --primary: #3b82f6; --primary-hover: #2563eb; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); margin: 0; padding: 20px; color: #1e293b; }
+        .grid { display: grid; grid-template-columns: 420px 1fr; gap: 20px; max-width: 1500px; margin: 0 auto; }
+        .card { background: var(--card); border-radius: 12px; padding: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+        .form-group { margin-bottom: 12px; }
+        label { display: block; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 4px; }
+        input[type="text"], input[type="number"], select { width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box; font-size: 13px; }
+        
+        .box-panel { background: #f1f5f9; padding: 10px; border-radius: 8px; margin-bottom: 8px; }
+        .coord-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+        .dimension-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .info-text { font-size: 11px; color: #64748b; margin-bottom: 6px; }
+
+        .file-drop { border: 2px dashed #cbd5e1; border-radius: 10px; padding: 20px; text-align: center; cursor: pointer; background: #f1f5f9; transition: all 0.2s; }
+        .file-drop.drag-over { border-color: var(--primary); background: #eff6ff; scale: 1.02; }
+
+        .palette-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; max-height: 150px; overflow-y: auto; border: 1px solid #e2e8f0; padding: 6px; border-radius: 6px; background: #f8fafc; }
+        .palette-item { display: flex; align-items: center; gap: 4px; font-size: 11px; cursor: pointer; }
+        .color-dot { width: 12px; height: 12px; border-radius: 3px; border: 1px solid rgba(0,0,0,0.2); display: inline-block; flex-shrink: 0; }
+
+        .btn { background: var(--primary); color: white; border: none; padding: 10px; font-weight: 600; border-radius: 8px; cursor: pointer; width: 100%; margin-top: 8px; font-size: 13px; }
+        .btn:hover { background: var(--primary-hover); }
+        .btn-green { background: #10b981; }
+        .btn-green:hover { background: #059669; }
+        
+        .preview-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        .preview-box { border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; text-align: center; background: #f8fafc; }
+        .preview-box h4 { margin: 0 0 10px 0; font-size: 12px; color: #64748b; }
+        canvas, img { max-width: 100%; height: auto; border: 1px solid #cbd5e1; border-radius: 4px; image-rendering: pixelated; 
+            background-image: conic-gradient(#e2e8f0 25%, transparent 25%), conic-gradient(transparent 75%, #e2e8f0 75%), conic-gradient(#e2e8f0 25%, transparent 25%), conic-gradient(transparent 75%, #e2e8f0 75%);
+            background-size: 16px 16px; background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+        }
+    </style>
+</head>
+<body>
+
+<div class="grid">
+    <!-- 左侧：编辑器面板 -->
+    <div class="card">
+        <div class="file-drop" id="dropZone" onclick="document.getElementById('fileInput').click()">
+            <strong style="color:var(--primary);">点击或拖拽 .wplace 文件到这里</strong>
+            <input type="file" id="fileInput" accept=".wplace,.json" style="display:none">
+        </div>
+
+        <form id="editorForm" style="display:none;">
+            <div class="form-group">
+                <label>原图文件名 (Name)</label>
+                <input type="text" id="propName">
+            </div>
+
+            <!-- 四坐标位置输入框 -->
+            <div class="form-group">
+                <label>左上角坐标位置 (Top-Left Four-Coordinates)</label>
+                <div class="box-panel">
+                    <div class="coord-grid">
+                        <div>
+                            <label>Tile X</label>
+                            <input type="number" id="coordTlX" oninput="onCoordChange()">
+                        </div>
+                        <div>
+                            <label>Tile Y</label>
+                            <input type="number" id="coordTlY" oninput="onCoordChange()">
+                        </div>
+                        <div>
+                            <label>Pixel X</label>
+                            <input type="number" id="coordPxX" min="0" max="999" oninput="onCoordChange()">
+                        </div>
+                        <div>
+                            <label>Pixel Y</label>
+                            <input type="number" id="coordPxY" min="0" max="999" oninput="onCoordChange()">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 目标尺寸控制 -->
+            <div class="form-group">
+                <label>转换尺寸调整 (Target Dimensions)</label>
+                <div class="box-panel">
+                    <div class="info-text">原图尺寸: <strong id="origDimText">0 x 0</strong> px</div>
+                    <div class="dimension-grid">
+                        <div>
+                            <label>目标宽度 (px)</label>
+                            <input type="number" id="targetWidth" oninput="onTargetWidthChange(this.value)">
+                        </div>
+                        <div>
+                            <label>目标高度 (px)</label>
+                            <input type="number" id="targetHeight" oninput="onTargetHeightChange(this.value)">
+                        </div>
+                    </div>
+                    <div style="margin-top:6px; font-size:11px;">
+                        <label style="display:inline-flex; align-items:center; gap:4px; font-weight:normal; text-transform:none;">
+                            <input type="checkbox" id="lockAspect" checked> 锁定长宽比例 (Keep Aspect Ratio)
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Color Palette (调色板范围)</label>
+                <select id="propColorPaletteMode" onchange="onPaletteModeChange(this.value)">
+                    <option value="all">All colors (所有颜色)</option>
+                    <option value="free">Free colors (免费基础颜色)</option>
+                    <option value="unlocked">Unlocked colors (已解锁颜色)</option>
+                    <option value="original">Original template colors (原模版颜色)</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>Color Metric (色差匹配算法)</label>
+                <select id="propColorMetric" onchange="renderPipeline()">
+                    <option value="lab">Perceptual (CIELAB 感知模式)</option>
+                    <option value="ciede2000">CIEDE2000 (高精度模式)</option>
+                    <option value="compuphase">Weighted RGB (加权 RGB 模式)</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label><input type="checkbox" id="propDithering" onchange="renderPipeline()"> Dithering (开启色彩抖动)</label>
+            </div>
+
+            <div class="form-group">
+                <label><input type="checkbox" id="propUseLegacyColors" onchange="renderPipeline()"> Use Legacy Colors (旧版颜色兼容)</label>
+            </div>
+
+            <div class="form-group">
+                <label>Opacity (透明度: <span id="opacityVal">1</span>)</label>
+                <input type="range" id="propOpacity" min="0" max="1" step="0.05" oninput="document.getElementById('opacityVal').innerText=this.value; renderPipeline();">
+            </div>
+
+            <div class="form-group">
+                <label>Active Template Colors (已选颜色列表)</label>
+                <div class="palette-grid" id="paletteGrid"></div>
+            </div>
+
+            <button type="button" class="btn" onclick="exportWplace()">💾 导出新的 .wplace 文件 (含最新 Bounds)</button>
+            <button type="button" class="btn btn-green" onclick="exportPNG()">🖼️ 导出转换后的 PNG 图片</button>
+        </form>
+    </div>
+
+    <!-- 右侧：实时预览区 -->
+    <div class="card">
+        <h3 style="margin-top:0;">原图与预览图</h3>
+        <div class="preview-grid">
+            <div class="preview-box">
+                <h4>原始图片 (Original)</h4>
+                <img id="origImg" src="" alt="原图">
+            </div>
+            <div class="preview-box">
+                <h4>官方算法转换效果 (Quantized Output)</h4>
+                <canvas id="outCanvas"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// ==================== 常量与坐标系双向转换算法 ====================
+const A1 = 1023999.50188499956857413054;
+const B1 = 325949.32345220289425924420;
+const A2 = 1023999.50188501563388854265;
+const B2 = 325949.32345236750552430749;
+const TILE_SIZE = 1000;
+
+// 1. 经纬度 -> 全局像素坐标 X/Y
+function latLngToPixel(lat, lng) {
+    const X = A1 + B1 * (lng * Math.PI / 180);
+    const t = Math.tan((lat * Math.PI / 360) + (Math.PI / 4));
+    const Y = A2 - B2 * Math.log(t);
+    return { x: X, y: Y };
+}
+
+// 2. 全局像素坐标 X/Y -> 经纬度
+function pixelToLatLng(x, y) {
+    const lng = ((x - A1) / B1) * (180 / Math.PI);
+    const t = Math.exp((A2 - y) / B2);
+    const lat = (360 / Math.PI) * (Math.atan(t) - Math.PI / 4);
+    return { lat, lng };
+}
+
+// 3. 四坐标 -> 经纬度
+function tileFourToLatLng(tlX, tlY, pxX, pxY) {
+    const X = tlX * TILE_SIZE + pxX;
+    const Y = tlY * TILE_SIZE + pxY;
+    const res = pixelToLatLng(X, Y);
+    res.x = X;
+    res.y = Y;
+    return res;
+}
+
+// 4. 经纬度 -> 四坐标
+function latLngToTileFour(lat, lng) {
+    const p = latLngToPixel(lat, lng);
+    const tlX = Math.floor(p.x / TILE_SIZE);
+    const pxX = Math.round(p.x - tlX * TILE_SIZE);
+    const tlY = Math.floor(p.y / TILE_SIZE);
+    const pxY = Math.round(p.y - tlY * TILE_SIZE);
+    return { tlX, tlY, pxX, pxY, x: p.x, y: p.y };
+}
+
+// ==================== 官方原版色表与算法引擎 ====================
+const b = {
+    colors: [
+        { name: "Transparent", rgb: [0, 0, 0] },     { name: "Black", rgb: [0, 0, 0] },
+        { name: "Dark Gray", rgb: [60, 60, 60] },    { name: "Gray", rgb: [120, 120, 120] },
+        { name: "Light Gray", rgb: [210, 210, 210] }, { name: "White", rgb: [255, 255, 255] },
+        { name: "Deep Red", rgb: [96, 0, 24] },       { name: "Red", rgb: [237, 28, 36] },
+        { name: "Orange", rgb: [255, 127, 39] },     { name: "Gold", rgb: [246, 170, 9] },
+        { name: "Yellow", rgb: [249, 221, 59] },     { name: "Light Yellow", rgb: [255, 250, 188] },
+        { name: "Dark Green", rgb: [14, 185, 104] }, { name: "Green", rgb: [19, 230, 123] },
+        { name: "Light Green", rgb: [135, 255, 94] }, { name: "Dark Teal", rgb: [12, 129, 110] },
+        { name: "Teal", rgb: [16, 174, 166] },        { name: "Light Teal", rgb: [19, 225, 190] },
+        { name: "Dark Blue", rgb: [40, 80, 158] },    { name: "Blue", rgb: [64, 147, 228] },
+        { name: "Cyan", rgb: [96, 247, 242] },        { name: "Indigo", rgb: [107, 80, 246] },
+        { name: "Light Indigo", rgb: [153, 177, 251] },{ name: "Dark Purple", rgb: [120, 12, 153] },
+        { name: "Purple", rgb: [170, 56, 185] },      { name: "Light Purple", rgb: [224, 159, 249] },
+        { name: "Dark Pink", rgb: [203, 0, 122] },    { name: "Pink", rgb: [236, 31, 128] },
+        { name: "Light Pink", rgb: [243, 141, 169] }, { name: "Dark Brown", rgb: [104, 70, 52] },
+        { name: "Brown", rgb: [149, 104, 42] },      { name: "Beige", rgb: [248, 178, 119] },
+        { name: "Medium Gray", rgb: [170, 170, 170] },{ name: "Dark Red", rgb: [165, 14, 30] },
+        { name: "Light Red", rgb: [250, 128, 114] },  { name: "Dark Orange", rgb: [228, 92, 26] },
+        { name: "Light Tan", rgb: [214, 181, 148] },  { name: "Dark Goldenrod", rgb: [156, 132, 49] },
+        { name: "Goldenrod", rgb: [197, 173, 49] },   { name: "Light Goldenrod", rgb: [232, 212, 95] },
+        { name: "Dark Olive", rgb: [74, 107, 58] },   { name: "Olive", rgb: [90, 148, 74] },
+        { name: "Light Olive", rgb: [132, 197, 115] }, { name: "Dark Cyan", rgb: [15, 121, 159] },
+        { name: "Light Cyan", rgb: [187, 250, 242] }, { name: "Light Blue", rgb: [125, 199, 255] },
+        { name: "Dark Indigo", rgb: [77, 49, 184] },  { name: "Dark Slate Blue", rgb: [74, 66, 132] },
+        { name: "Slate Blue", rgb: [122, 113, 196] }, { name: "Light Slate Blue", rgb: [181, 174, 241] },
+        { name: "Light Brown", rgb: [219, 164, 99] }, { name: "Dark Beige", rgb: [209, 128, 81] },
+        { name: "Light Beige", rgb: [255, 197, 165] }, { name: "Dark Peach", rgb: [155, 82, 73] },
+        { name: "Peach", rgb: [209, 128, 120] },      { name: "Light Peach", rgb: [250, 182, 164] },
+        { name: "Dark Tan", rgb: [123, 99, 82] },     { name: "Tan", rgb: [156, 132, 107] },
+        { name: "Dark Slate", rgb: [51, 57, 65] },    { name: "Slate", rgb: [109, 117, 141] },
+        { name: "Light Slate", rgb: [179, 185, 209] },{ name: "Dark Stone", rgb: [109, 100, 63] },
+        { name: "Stone", rgb: [148, 140, 107] },      { name: "Light Stone", rgb: [205, 197, 158] }
+    ]
+};
+
+// 官方纯数据缩放函数 hx
+function hx(t, r, e) {
+    const v = t.width, T = t.height, S = new ImageData(r, e), x = t.data, u = S.data;
+    for (let D = 0; D < e; D++) {
+        const R = Math.min(Math.floor(D * T / e), T - 1);
+        for (let Z = 0; Z < r; Z++) {
+            const N = Math.min(Math.floor(Z * v / r), v - 1), X = (R * v + N) * 4, ee = (D * r + Z) * 4;
+            u[ee] = x[X]; u[ee + 1] = x[X + 1]; u[ee + 2] = x[X + 2]; u[ee + 3] = x[X + 3];
+        }
+    }
+    return S;
+}
+
+const d = 2 * Math.PI, B = 6103515625, G = .5235987755982988, K = .10471975511965977, Q = 1.0995574287564276, Y = 4.799655442984406, Z = .4363323129985824;
+function S(t) { const n = t * t; return n * n * n * t; }
+function H(t, n) { const o = Math.atan2(t, n); return o < 0 ? o + d : o; }
+function Rd(t, n, o) { return Math.min(Math.max(t, n), o); }
+
+const P = new Float64Array(256);
+for (let t = 0; t < 256; t++) {
+    const n = t / 255;
+    P[t] = n > .04045 ? Math.pow((n + .055) / 1.055, 2.4) : n / 12.92;
+}
+
+function k(t) {
+    const n = P[t.r], o = P[t.g], e = P[t.b];
+    let s = (n * .4124 + o * .3576 + e * .1805) / .95047, c = n * .2126 + o * .7152 + e * .0722, r = (n * .0193 + o * .1192 + e * .9505) / 1.08883;
+    return s = s > .008856 ? Math.cbrt(s) : 7.787 * s + 16 / 116, c = c > .008856 ? Math.cbrt(c) : 7.787 * c + 16 / 116, r = r > .008856 ? Math.cbrt(r) : 7.787 * r + 16 / 116, { l: 116 * c - 16, a: 500 * (s - c), b: 200 * (c - r) };
+}
+
+const E = b.colors.map((t, n) => ({ idx: n, lab: k({ r: t.rgb[0], g: t.rgb[1], b: t.rgb[2] }) })).filter(t => t.idx !== 0);
+const p = b.colors.map((t, n) => ({ idx: n, rgb: { r: t.rgb[0], g: t.rgb[1], b: t.rgb[2] } })).filter(t => t.idx !== 0);
+const w = new Array(b.colors.length); for (const t of E) w[t.idx] = t;
+const N = new Array(b.colors.length); for (const t of p) N[t.idx] = t;
+
+function gt(t) {
+    t = Math.min(t, b.colors.length - 1);
+    const [n, o, e] = b.colors[t].rgb;
+    return { r: n, g: o, b: e, a: t === 0 ? 0 : 255 };
+}
+
+function ot(t, n) {
+    const o = t.l - n.l, e = t.a - n.a, s = t.b - n.b, c = Math.sqrt(t.a * t.a + t.b * t.b), r = Math.sqrt(n.a * n.a + n.b * n.b), i = c - r;
+    let a = e * e + s * s - i * i; a = a < 0 ? 0 : Math.sqrt(a);
+    const l = 1 + .045 * c, h = 1 + .015 * c, u = i / l, f = a / h, M = o * o + u * u + f * f;
+    return M < 0 ? 0 : Math.sqrt(M);
+}
+
+function et(t, n) {
+    const o = Math.sqrt(t.a * t.a + t.b * t.b), e = Math.sqrt(n.a * n.a + n.b * n.b), s = (o + e) * .5, c = S(s), r = .5 * (1 - Math.sqrt(c / (c + B))), i = (1 + r) * t.a, a = (1 + r) * n.a, l = Math.sqrt(i * i + t.b * t.b), h = Math.sqrt(a * a + n.b * n.b), u = l * h, f = l === 0 ? 0 : H(t.b, i), M = h === 0 ? 0 : H(n.b, a), v = n.l - t.l, F = h - l;
+    let m = 0; u !== 0 && (m = M - f, m > Math.PI ? m -= d : m < -Math.PI && (m += d));
+    const O = u === 0 ? 0 : 2 * Math.sqrt(u) * Math.sin(m * .5), U = (t.l + n.l) * .5, x = (l + h) * .5;
+    let g = f + M; u !== 0 && (Math.abs(f - M) > Math.PI ? g = g < d ? (g + d) * .5 : (g - d) * .5 : g *= .5);
+    const $ = 1 - .17 * Math.cos(g - G) + .24 * Math.cos(2 * g) + .32 * Math.cos(3 * g + K) - .2 * Math.cos(4 * g - Q), q = (g - Y) / Z, z = G * Math.exp(-(q * q)), A = S(x), V = 2 * Math.sqrt(A / (A + B)), y = U - 50, C = y * y, X = 1 + .015 * C / Math.sqrt(20 + C), W = 1 + .045 * x, j = 1 + .015 * x * $, J = -Math.sin(2 * z) * V, T = v / X, _ = F / W, D = O / j, I = T * T + _ * _ + D * D + J * _ * D;
+    return I > 0 ? I : 0;
+}
+
+function st(t, n) {
+    const o = (t.r + n.r) / 2, e = t.r - n.r, s = t.g - n.g, c = t.b - n.b, r = 2 + o / 256, i = 2 + (255 - o) / 256;
+    return r * e * e + 4 * s * s + i * c * c;
+}
+
+function tt(t, n, o) {
+    let e = E[0].idx, s = Number.MAX_VALUE;
+    const c = o && o.length > 0, r = c ? o.length : E.length;
+    for (let i = 0; i < r; i++) {
+        const a = c ? w[o[i]] : E[i]; if (!a) continue;
+        const l = n(t, a.lab); (l < s || l === s && a.idx < e) && (e = a.idx, s = l);
+    }
+    return e;
+}
+
+function nt(t, n) {
+    let o = p[0].idx, e = Number.MAX_VALUE;
+    const s = n && n.length > 0, c = s ? n.length : p.length;
+    for (let r = 0; r < c; r++) {
+        const i = s ? N[n[r]] : p[r]; if (!i) continue;
+        const a = st(t, i.rgb); (a < e || a === e && i.idx < o) && (o = i.idx, e = a);
+    }
+    return o;
+}
+
+function ut(t, n="lab", o) {
+    if (n === "compuphase") return nt(t, o);
+    const e = k(t);
+    return tt(e, n === "ciede2000" ? et : ot, o);
+}
+
+function *iE(t, r, e, v, T, S, x) {
+    const u = { r: 0, g: 0, b: 0 };
+    if (T) {
+        const D = r * 3; let R = new Float32Array(D), Z = new Float32Array(D);
+        for (let N = 0; N < e; N++) {
+            const X = R; R = Z; Z = X; Z.fill(0);
+            for (let ee = 0; ee < r; ee++) {
+                const ae = (N * r + ee) * 4; if (t[ae + 3] < 16) { t[ae + 3] = 0; continue; }
+                const ne = ee * 3, Y = Rd(Math.round(t[ae] + R[ne]), 0, 255), oe = Rd(Math.round(t[ae + 1] + R[ne + 1]), 0, 255), ye = Rd(Math.round(t[ae + 2] + R[ne + 2]), 0, 255), ie = Y << 16 | oe << 8 | ye;
+                let he = x.get(ie);
+                he === void 0 && (u.r = Y, u.g = oe, u.b = ye, he = ut(u, v, S), x.set(ie, he));
+                const ve = gt(he); t[ae] = ve.r; t[ae + 1] = ve.g; t[ae + 2] = ve.b; t[ae + 3] = ve.a;
+                const Te = Y - ve.r, pe = oe - ve.g, B = ye - ve.b;
+                if (ee + 1 < r) { const G = (ee + 1) * 3; R[G] += Te * (7 / 16); R[G + 1] += pe * (7 / 16); R[G + 2] += B * (7 / 16); }
+                if (N + 1 < e) {
+                    if (ee > 0) { const W = (ee - 1) * 3; Z[W] += Te * (3 / 16); Z[W + 1] += pe * (3 / 16); Z[W + 2] += B * (3 / 16); }
+                    const G = ee * 3;
+                    if (Z[G] += Te * (5 / 16), Z[G + 1] += pe * (5 / 16), Z[G + 2] += B * (5 / 16), ee + 1 < r) {
+                        const W = (ee + 1) * 3; Z[W] += Te * (1 / 16); Z[W + 1] += pe * (1 / 16); Z[W + 2] += B * (1 / 16);
+                    }
+                }
+            }
+            yield N;
+        }
+        return;
+    }
+    for (let D = 0; D < e; D++) {
+        const R = D * r * 4;
+        for (let Z = 0; Z < r; Z++) {
+            const N = R + Z * 4; if (t[N + 3] < 16) { t[N + 3] = 0; continue; }
+            const X = t[N] << 16 | t[N + 1] << 8 | t[N + 2];
+            let ee = x.get(X);
+            ee === void 0 && (u.r = t[N], u.g = t[N + 1], u.b = t[N + 2], ee = ut(u, v, S), x.set(X, ee));
+            const ae = gt(ee); t[N] = ae.r; t[N + 1] = ae.g; t[N + 2] = ae.b; t[N + 3] = ae.a;
+        }
+        yield D;
+    }
+}
+
+// ==================== 页面控制逻辑 ====================
+
+let currentWplace = null, origImgObj = null, origRawImageData = null;
+
+const dropZone = document.getElementById('dropZone');
+['dragenter', 'dragover', 'dragleave', 'drop'].forEach(e => dropZone.addEventListener(e, ev => ev.preventDefault()));
+dropZone.addEventListener('dragover', () => dropZone.classList.add('drag-over'));
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', (e) => {
+    dropZone.classList.remove('drag-over');
+    if (e.dataTransfer.files.length) loadFile(e.dataTransfer.files[0]);
+});
+document.getElementById('fileInput').addEventListener('change', (e) => {
+    if (e.target.files.length) loadFile(e.target.files[0]);
+});
+
+function loadFile(file) {
+    let reader = new FileReader();
+    reader.onload = function(evt) {
+        try {
+            currentWplace = JSON.parse(evt.target.result);
+            initUI();
+        } catch (err) { alert("无效的 .wplace JSON 文件！"); }
+    };
+    reader.readAsText(file);
+}
+
+function initUI() {
+    document.getElementById('propName').value = currentWplace.name || "";
+    document.getElementById('propColorMetric').value = currentWplace.colorMetric || "lab";
+    document.getElementById('propColorPaletteMode').value = currentWplace.colorPaletteMode || "free";
+    document.getElementById('propDithering').checked = !!currentWplace.dithering;
+    document.getElementById('propUseLegacyColors').checked = !!currentWplace.useLegacyColors;
+    document.getElementById('propOpacity').value = currentWplace.opacity ?? 1;
+    document.getElementById('opacityVal').innerText = currentWplace.opacity ?? 1;
+
+    renderPaletteCheckboxes();
+
+    origImgObj = document.getElementById('origImg');
+    origImgObj.onload = function() {
+        let origW = origImgObj.naturalWidth, origH = origImgObj.naturalHeight;
+        document.getElementById('origDimText').innerText = `${origW} x ${origH}`;
+
+        // 提取 1x 原始 ImageData
+        let c = document.createElement('canvas');
+        c.width = origW; c.height = origH;
+        let cx = c.getContext('2d', { colorSpace: 'srgb' });
+        cx.drawImage(origImgObj, 0, 0);
+        origRawImageData = cx.getImageData(0, 0, origW, origH);
+
+        let bData = currentWplace.bounds;
+        if (bData) {
+            // 计算四坐标 (North & West)
+            let tf = latLngToTileFour(bData.north, bData.west);
+            document.getElementById('coordTlX').value = tf.tlX;
+            document.getElementById('coordTlY').value = tf.tlY;
+            document.getElementById('coordPxX').value = tf.pxX;
+            document.getElementById('coordPxY').value = tf.pxY;
+
+            // 计算目标像素长宽
+            let pSE = latLngToPixel(bData.south, bData.east);
+            let calcW = Math.round(Math.abs(pSE.x - tf.x));
+            let calcH = Math.round(Math.abs(pSE.y - tf.y));
+            document.getElementById('targetWidth').value = calcW || origW;
+            document.getElementById('targetHeight').value = calcH || origH;
+        } else {
+            document.getElementById('coordTlX').value = 0;
+            document.getElementById('coordTlY').value = 0;
+            document.getElementById('coordPxX').value = 0;
+            document.getElementById('coordPxY').value = 0;
+            document.getElementById('targetWidth').value = origW;
+            document.getElementById('targetHeight').value = origH;
+        }
+        renderPipeline();
+    };
+    origImgObj.src = currentWplace.image.dataUrl;
+    document.getElementById('editorForm').style.display = "block";
+}
+
+function onCoordChange() {
+    renderPipeline();
+}
+
+function onTargetWidthChange(newW) {
+    newW = parseInt(newW) || 1;
+    if (document.getElementById('lockAspect').checked && origImgObj) {
+        let ratio = origImgObj.naturalHeight / origImgObj.naturalWidth;
+        document.getElementById('targetHeight').value = Math.round(newW * ratio);
+    }
+    renderPipeline();
+}
+
+function onTargetHeightChange(newH) {
+    newH = parseInt(newH) || 1;
+    if (document.getElementById('lockAspect').checked && origImgObj) {
+        let ratio = origImgObj.naturalWidth / origImgObj.naturalHeight;
+        document.getElementById('targetWidth').value = Math.round(newH * ratio);
+    }
+    renderPipeline();
+}
+
+function renderPaletteCheckboxes() {
+    let grid = document.getElementById('paletteGrid');
+    grid.innerHTML = "";
+    let activeSet = new Set(currentWplace.templateColorIdxs || []);
+    for (let i = 1; i < b.colors.length; i++) {
+        let item = b.colors[i];
+        let rgbStr = `rgb(${item.rgb.join(',')})`;
+        let label = document.createElement('label');
+        label.className = 'palette-item';
+        label.innerHTML = `
+            <input type="checkbox" value="${i}" ${activeSet.has(i) ? 'checked' : ''} onchange="renderPipeline()">
+            <span class="color-dot" style="background:${rgbStr}"></span>
+            <span>${i}.${item.name}</span>
+        `;
+        grid.appendChild(label);
+    }
+}
+
+function onPaletteModeChange(mode) {
+    currentWplace.colorPaletteMode = mode;
+    let checkboxes = document.querySelectorAll('#paletteGrid input[type="checkbox"]');
+    if (mode === 'all') checkboxes.forEach(cb => cb.checked = true);
+    else if (mode === 'free') checkboxes.forEach(cb => cb.checked = parseInt(cb.value) <= 31);
+    renderPipeline();
+}
+
+function renderPipeline() {
+    if (!origRawImageData) return;
+
+    let targetW = parseInt(document.getElementById('targetWidth').value) || origRawImageData.width;
+    let targetH = parseInt(document.getElementById('targetHeight').value) || origRawImageData.height;
+
+    // 1. hx 采样缩放
+    let scaledImageData;
+    if (targetW === origRawImageData.width && targetH === origRawImageData.height) {
+        scaledImageData = new ImageData(new Uint8ClampedArray(origRawImageData.data), targetW, targetH);
+    } else {
+        scaledImageData = hx(origRawImageData, targetW, targetH);
+    }
+
+    // 2. iE 转换
+    let allowedIdxs = Array.from(document.querySelectorAll('#paletteGrid input:checked')).map(cb => parseInt(cb.value));
+    if (allowedIdxs.length === 0) allowedIdxs = [31];
+
+    let metric = document.getElementById('propColorMetric').value;
+    let dithering = document.getElementById('propDithering').checked;
+    let opacity = parseFloat(document.getElementById('propOpacity').value);
+    let cacheMap = new Map();
+
+    const generator = iE(scaledImageData.data, targetW, targetH, metric, dithering, allowedIdxs, cacheMap);
+    while (!generator.next().done) {}
+
+    // 透明度调整
+    if (opacity < 1) {
+        let tData = scaledImageData.data;
+        for (let i = 3; i < tData.length; i += 4) {
+            tData[i] = Math.round(tData[i] * opacity);
+        }
+    }
+
+    // 3. 绘制预览
+    let outCanvas = document.getElementById('outCanvas');
+    outCanvas.width = targetW; outCanvas.height = targetH;
+    let outCtx = outCanvas.getContext('2d', { colorSpace: 'srgb' });
+    outCtx.putImageData(scaledImageData, 0, 0);
+}
+
+// 导出文件
+function exportWplace() {
+    let tlX = parseInt(document.getElementById('coordTlX').value) || 0;
+    let tlY = parseInt(document.getElementById('coordTlY').value) || 0;
+    let pxX = parseInt(document.getElementById('coordPxX').value) || 0;
+    let pxY = parseInt(document.getElementById('coordPxY').value) || 0;
+
+    let targetW = parseInt(document.getElementById('targetWidth').value) || origRawImageData.width;
+    let targetH = parseInt(document.getElementById('targetHeight').value) || origRawImageData.height;
+
+    // 从四坐标和长宽算出最新的 bounds 经纬度
+    let nw = tileFourToLatLng(tlX, tlY, pxX, pxY);
+    let se = tileFourToLatLng(0, 0, nw.x + targetW, nw.y + targetH);
+
+    currentWplace.bounds = {
+        north: nw.lat,
+        west: nw.lng,
+        south: se.lat,
+        east: se.lng
+    };
+
+    currentWplace.name = document.getElementById('propName').value;
+    currentWplace.colorMetric = document.getElementById('propColorMetric').value;
+    currentWplace.colorPaletteMode = document.getElementById('propColorPaletteMode').value;
+    currentWplace.dithering = document.getElementById('propDithering').checked;
+    currentWplace.useLegacyColors = document.getElementById('propUseLegacyColors').checked;
+    currentWplace.opacity = parseFloat(document.getElementById('propOpacity').value);
+    currentWplace.templateColorIdxs = Array.from(document.querySelectorAll('#paletteGrid input:checked')).map(cb => parseInt(cb.value));
+
+    let blob = new Blob([JSON.stringify(currentWplace, null, 2)], { type: "application/json" });
+    let a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = (currentWplace.name || "template").replace(/\.[^/.]+$/, "") + ".wplace";
+    a.click();
+}
+
+function exportPNG() {
+    let canvas = document.getElementById('outCanvas');
+    let a = document.createElement('a');
+    a.href = canvas.toDataURL('image/png');
+    a.download = (currentWplace.name || "converted") + "_quantized.png";
+    a.click();
+}
+</script>
+
+</body>
+</html>
