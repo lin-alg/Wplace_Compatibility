@@ -21,16 +21,18 @@
         .file-drop.drag-over { border-color: var(--primary); background: #eff6ff; scale: 1.02; }
 
         .palette-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; max-height: 150px; overflow-y: auto; border: 1px solid #e2e8f0; padding: 6px; border-radius: 6px; background: #f8fafc; }
-        .palette-item { display: flex; align-items: center; gap: 4px; font-size: 11px; cursor: pointer; }
+        .palette-item { display: flex; align-items: center; gap: 4px; font-size: 11px; cursor: pointer; user-select: none; }
         .color-dot { width: 12px; height: 12px; border-radius: 3px; border: 1px solid rgba(0,0,0,0.2); display: inline-block; flex-shrink: 0; }
 
-        .btn { background: var(--primary); color: white; border: none; padding: 10px; font-weight: 600; border-radius: 8px; cursor: pointer; width: 100%; margin-top: 8px; font-size: 13px; }
+        .btn { background: var(--primary); color: white; border: none; padding: 10px; font-weight: 600; border-radius: 8px; cursor: pointer; width: 100%; margin-top: 8px; font-size: 13px; transition: background 0.2s; }
         .btn:hover { background: var(--primary-hover); }
         .btn-green { background: #10b981; }
         .btn-green:hover { background: #059669; }
+        .btn-indigo { background: #6366f1; }
+        .btn-indigo:hover { background: #4f46e5; }
         
         .preview-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
-        .preview-box { border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; text-align: center; background: #f8fafc; }
+        .preview-box { border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; text-align: center; background: #f8fafc; position: relative; }
         .preview-box h4 { margin: 0 0 10px 0; font-size: 12px; color: #64748b; }
         canvas, img { max-width: 100%; height: auto; border: 1px solid #cbd5e1; border-radius: 4px; image-rendering: pixelated; 
             background-image: conic-gradient(#e2e8f0 25%, transparent 25%), conic-gradient(transparent 75%, #e2e8f0 75%), conic-gradient(#e2e8f0 25%, transparent 25%), conic-gradient(transparent 75%, #e2e8f0 75%);
@@ -48,10 +50,15 @@
             <input type="file" id="fileInput" accept=".wplace,.json" style="display:none">
         </div>
 
-        <form id="editorForm" style="display:none;">
+        <form id="editorForm" style="display:none; margin-top: 15px;">
+            <!-- 原图文件名及替换按钮 -->
             <div class="form-group">
                 <label>原图文件名 (Name)</label>
-                <input type="text" id="propName">
+                <div style="display: flex; gap: 8px;">
+                    <input type="text" id="propName">
+                    <button type="button" class="btn btn-indigo" style="width: auto; margin-top: 0; white-space: nowrap; padding: 0 12px;" onclick="document.getElementById('replaceImgInput').click()">🖼️ 替换图片</button>
+                    <input type="file" id="replaceImgInput" accept="image/*" style="display:none" onchange="handleImageReplace(this)">
+                </div>
             </div>
 
             <!-- 四坐标位置输入框 -->
@@ -134,7 +141,11 @@
             </div>
 
             <div class="form-group">
-                <label>Active Template Colors (已选颜色列表)</label>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                    <label style="margin-bottom:0;">Active Colors (<span id="colorCountText">0</span> / 63)</label>
+                    <span style="font-size:11px; color:#3b82f6; cursor:pointer;" onclick="toggleAllColors(true)">全选</span>
+                    <span style="font-size:11px; color:#ef4444; cursor:pointer; margin-left:6px;" onclick="toggleAllColors(false)">全不选</span>
+                </div>
                 <div class="palette-grid" id="paletteGrid"></div>
             </div>
 
@@ -147,8 +158,8 @@
     <div class="card">
         <h3 style="margin-top:0;">原图与预览图</h3>
         <div class="preview-grid">
-            <div class="preview-box">
-                <h4>原始图片 (Original)</h4>
+            <div class="preview-box" id="origBox">
+                <h4>原始图片 (Original - 可用新图替换)</h4>
                 <img id="origImg" src="" alt="原图">
             </div>
             <div class="preview-box">
@@ -368,10 +379,11 @@ function *iE(t, r, e, v, T, S, x) {
     }
 }
 
-// ==================== 页面控制逻辑 ====================
+// ==================== 页面控制与替换图片逻辑 ====================
 
 let currentWplace = null, origImgObj = null, origRawImageData = null;
 
+// 1. .wplace 文件拖拽与选择
 const dropZone = document.getElementById('dropZone');
 ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(e => dropZone.addEventListener(e, ev => ev.preventDefault()));
 dropZone.addEventListener('dragover', () => dropZone.classList.add('drag-over'));
@@ -382,6 +394,18 @@ dropZone.addEventListener('drop', (e) => {
 });
 document.getElementById('fileInput').addEventListener('change', (e) => {
     if (e.target.files.length) loadFile(e.target.files[0]);
+});
+
+// 2. 原图预览区支持直接拖入替换新图片
+const origBox = document.getElementById('origBox');
+['dragenter', 'dragover', 'dragleave', 'drop'].forEach(e => origBox.addEventListener(e, ev => ev.preventDefault()));
+origBox.addEventListener('dragover', () => origBox.style.borderColor = 'var(--primary)');
+origBox.addEventListener('dragleave', () => origBox.style.borderColor = '#e2e8f0');
+origBox.addEventListener('drop', (e) => {
+    origBox.style.borderColor = '#e2e8f0';
+    if (e.dataTransfer.files.length && e.dataTransfer.files[0].type.startsWith('image/')) {
+        replaceImageFromFile(e.dataTransfer.files[0]);
+    }
 });
 
 function loadFile(file) {
@@ -395,22 +419,41 @@ function loadFile(file) {
     reader.readAsText(file);
 }
 
-function initUI() {
-    document.getElementById('propName').value = currentWplace.name || "";
-    document.getElementById('propColorMetric').value = currentWplace.colorMetric || "lab";
-    document.getElementById('propColorPaletteMode').value = currentWplace.colorPaletteMode || "free";
-    document.getElementById('propDithering').checked = !!currentWplace.dithering;
-    document.getElementById('propUseLegacyColors').checked = !!currentWplace.useLegacyColors;
-    document.getElementById('propOpacity').value = currentWplace.opacity ?? 1;
-    document.getElementById('opacityVal').innerText = currentWplace.opacity ?? 1;
+function handleImageReplace(input) {
+    if (!input.files || input.files.length === 0) return;
+    replaceImageFromFile(input.files[0]);
+    input.value = "";
+}
 
-    renderPaletteCheckboxes();
+function replaceImageFromFile(file) {
+    if (!currentWplace) {
+        alert("请先导入 .wplace 文件！");
+        return;
+    }
+    let reader = new FileReader();
+    reader.onload = function(evt) {
+        const dataUrl = evt.target.result;
+        if (!currentWplace.image) currentWplace.image = {};
+        currentWplace.image.dataUrl = dataUrl;
+        
+        document.getElementById('propName').value = file.name;
+        currentWplace.name = file.name;
 
+        loadImageData(dataUrl, true);
+    };
+    reader.readAsDataURL(file);
+}
+
+function loadImageData(dataUrl, isReplacing = false) {
     origImgObj = document.getElementById('origImg');
     origImgObj.onload = function() {
         let origW = origImgObj.naturalWidth, origH = origImgObj.naturalHeight;
         document.getElementById('origDimText').innerText = `${origW} x ${origH}`;
 
+        if (currentWplace && currentWplace.image) {
+            currentWplace.image.width = origW;
+            currentWplace.image.height = origH;
+        }
         // 提取 1x 原始 ImageData
         let c = document.createElement('canvas');
         c.width = origW; c.height = origH;
@@ -418,32 +461,78 @@ function initUI() {
         cx.drawImage(origImgObj, 0, 0);
         origRawImageData = cx.getImageData(0, 0, origW, origH);
 
-        let bData = currentWplace.bounds;
-        if (bData) {
-            // 计算四坐标 (North & West)
-            let tf = latLngToTileFour(bData.north, bData.west);
-            document.getElementById('coordTlX').value = tf.tlX;
-            document.getElementById('coordTlY').value = tf.tlY;
-            document.getElementById('coordPxX').value = tf.pxX;
-            document.getElementById('coordPxY').value = tf.pxY;
-
-            // 计算目标像素长宽
-            let pSE = latLngToPixel(bData.south, bData.east);
-            let calcW = Math.round(Math.abs(pSE.x - tf.x));
-            let calcH = Math.round(Math.abs(pSE.y - tf.y));
-            document.getElementById('targetWidth').value = calcW || origW;
-            document.getElementById('targetHeight').value = calcH || origH;
-        } else {
-            document.getElementById('coordTlX').value = 0;
-            document.getElementById('coordTlY').value = 0;
-            document.getElementById('coordPxX').value = 0;
-            document.getElementById('coordPxY').value = 0;
+        if (isReplacing) {
             document.getElementById('targetWidth').value = origW;
             document.getElementById('targetHeight').value = origH;
         }
+
         renderPipeline();
     };
-    origImgObj.src = currentWplace.image.dataUrl;
+    origImgObj.src = dataUrl;
+}
+
+// 判定并计算初始应该勾选的颜色集合
+function calculateActiveColors(mode, customIdxs) {
+    if (mode === 'all') {
+        return new Set(Array.from({ length: b.colors.length - 1 }, (_, i) => i + 1)); // 1 ~ 63 全选
+    } else if (mode === 'free') {
+        return new Set(Array.from({ length: 31 }, (_, i) => i + 1)); // 1 ~ 31 免费基础色
+    } else if (mode === 'original') {
+        if (Array.isArray(customIdxs) && customIdxs.length > 0) {
+            return new Set(customIdxs);
+        }
+        return new Set(Array.from({ length: b.colors.length - 1 }, (_, i) => i + 1)); // 兜底全选
+    }
+    // 未定义时根据是否有 templateColorIdxs 做判定
+    if (Array.isArray(customIdxs) && customIdxs.length > 0) {
+        return new Set(customIdxs);
+    }
+    return new Set(Array.from({ length: b.colors.length - 1 }, (_, i) => i + 1));
+}
+
+function initUI() {
+    document.getElementById('propName').value = currentWplace.name || "";
+    document.getElementById('propColorMetric').value = currentWplace.colorMetric || "lab";
+    document.getElementById('propDithering').checked = !!currentWplace.dithering;
+    document.getElementById('propUseLegacyColors').checked = !!currentWplace.useLegacyColors;
+    document.getElementById('propOpacity').value = currentWplace.opacity ?? 1;
+    document.getElementById('opacityVal').innerText = currentWplace.opacity ?? 1;
+
+    // 确定 Palette 模式并初始化勾选状态
+    let mode = currentWplace.colorPaletteMode;
+    if (!mode) {
+        if (Array.isArray(currentWplace.templateColorIdxs) && currentWplace.templateColorIdxs.length > 0) {
+            mode = "original";
+        } else {
+            mode = "all";
+        }
+    }
+    document.getElementById('propColorPaletteMode').value = mode;
+
+    let activeSet = calculateActiveColors(mode, currentWplace.templateColorIdxs);
+    renderPaletteCheckboxes(activeSet);
+
+    let bData = currentWplace.bounds;
+    if (bData) {
+        let tf = latLngToTileFour(bData.north, bData.west);
+        document.getElementById('coordTlX').value = tf.tlX;
+        document.getElementById('coordTlY').value = tf.tlY;
+        document.getElementById('coordPxX').value = tf.pxX;
+        document.getElementById('coordPxY').value = tf.pxY;
+
+        let pSE = latLngToPixel(bData.south, bData.east);
+        let calcW = Math.round(Math.abs(pSE.x - tf.x));
+        let calcH = Math.round(Math.abs(pSE.y - tf.y));
+        document.getElementById('targetWidth').value = calcW;
+        document.getElementById('targetHeight').value = calcH;
+    } else {
+        document.getElementById('coordTlX').value = 0;
+        document.getElementById('coordTlY').value = 0;
+        document.getElementById('coordPxX').value = 0;
+        document.getElementById('coordPxY').value = 0;
+    }
+
+    loadImageData(currentWplace.image.dataUrl, false);
     document.getElementById('editorForm').style.display = "block";
 }
 
@@ -453,7 +542,7 @@ function onCoordChange() {
 
 function onTargetWidthChange(newW) {
     newW = parseInt(newW) || 1;
-    if (document.getElementById('lockAspect').checked && origImgObj) {
+    if (document.getElementById('lockAspect').checked && origImgObj && origImgObj.naturalWidth) {
         let ratio = origImgObj.naturalHeight / origImgObj.naturalWidth;
         document.getElementById('targetHeight').value = Math.round(newW * ratio);
     }
@@ -462,36 +551,74 @@ function onTargetWidthChange(newW) {
 
 function onTargetHeightChange(newH) {
     newH = parseInt(newH) || 1;
-    if (document.getElementById('lockAspect').checked && origImgObj) {
+    if (document.getElementById('lockAspect').checked && origImgObj && origImgObj.naturalHeight) {
         let ratio = origImgObj.naturalWidth / origImgObj.naturalHeight;
         document.getElementById('targetWidth').value = Math.round(newH * ratio);
     }
     renderPipeline();
 }
 
-function renderPaletteCheckboxes() {
+function renderPaletteCheckboxes(activeSet) {
     let grid = document.getElementById('paletteGrid');
     grid.innerHTML = "";
-    let activeSet = new Set(currentWplace.templateColorIdxs || []);
     for (let i = 1; i < b.colors.length; i++) {
         let item = b.colors[i];
         let rgbStr = `rgb(${item.rgb.join(',')})`;
         let label = document.createElement('label');
         label.className = 'palette-item';
         label.innerHTML = `
-            <input type="checkbox" value="${i}" ${activeSet.has(i) ? 'checked' : ''} onchange="renderPipeline()">
+            <input type="checkbox" value="${i}" ${activeSet.has(i) ? 'checked' : ''} onchange="onColorCheckboxChange()">
             <span class="color-dot" style="background:${rgbStr}"></span>
             <span>${i}.${item.name}</span>
         `;
         grid.appendChild(label);
     }
+    updateColorCount();
+}
+
+function updateColorCount() {
+    let checkedBoxes = document.querySelectorAll('#paletteGrid input[type="checkbox"]:checked');
+    document.getElementById('colorCountText').innerText = checkedBoxes.length;
+}
+
+// 手动单选颜色变化时，联动切换模式为 original
+function onColorCheckboxChange() {
+    updateColorCount();
+    let checked = Array.from(document.querySelectorAll('#paletteGrid input[type="checkbox"]:checked')).map(cb => parseInt(cb.value));
+    
+    // 检查是否刚好全选或刚好全免费色
+    if (checked.length === b.colors.length - 1) {
+        document.getElementById('propColorPaletteMode').value = "all";
+    } else if (checked.length === 31 && checked.every(id => id <= 31)) {
+        document.getElementById('propColorPaletteMode').value = "free";
+    } else {
+        document.getElementById('propColorPaletteMode').value = "original";
+    }
+
+    renderPipeline();
 }
 
 function onPaletteModeChange(mode) {
-    currentWplace.colorPaletteMode = mode;
     let checkboxes = document.querySelectorAll('#paletteGrid input[type="checkbox"]');
-    if (mode === 'all') checkboxes.forEach(cb => cb.checked = true);
-    else if (mode === 'free') checkboxes.forEach(cb => cb.checked = parseInt(cb.value) <= 31);
+    if (mode === 'all') {
+        checkboxes.forEach(cb => cb.checked = true);
+    } else if (mode === 'free') {
+        checkboxes.forEach(cb => cb.checked = (parseInt(cb.value) <= 31));
+    } else if (mode === 'original') {
+        if (currentWplace && Array.isArray(currentWplace.templateColorIdxs) && currentWplace.templateColorIdxs.length > 0) {
+            let origSet = new Set(currentWplace.templateColorIdxs);
+            checkboxes.forEach(cb => cb.checked = origSet.has(parseInt(cb.value)));
+        }
+    }
+    updateColorCount();
+    renderPipeline();
+}
+
+function toggleAllColors(selectAll) {
+    let checkboxes = document.querySelectorAll('#paletteGrid input[type="checkbox"]');
+    checkboxes.forEach(cb => cb.checked = selectAll);
+    document.getElementById('propColorPaletteMode').value = selectAll ? "all" : "original";
+    updateColorCount();
     renderPipeline();
 }
 
@@ -511,7 +638,7 @@ function renderPipeline() {
 
     // 2. iE 转换
     let allowedIdxs = Array.from(document.querySelectorAll('#paletteGrid input:checked')).map(cb => parseInt(cb.value));
-    if (allowedIdxs.length === 0) allowedIdxs = [31];
+    if (allowedIdxs.length === 0) allowedIdxs = [1]; // 至少选一个颜色防白屏
 
     let metric = document.getElementById('propColorMetric').value;
     let dithering = document.getElementById('propDithering').checked;
